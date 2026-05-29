@@ -1,0 +1,20 @@
+{
+  "name": "dracula",
+  "author": "Dracula Theme",
+  "description": "Dracula color scheme",
+  "colors": {
+    "primary": "#bd93f9",
+    "secondary": "#ff79c6",
+    "success": "#50fa7b",
+    "error": "#ff5555",
+    "warning": "#f1fa8c",
+    "info": "#8be9fd",
+    "text": "#f8f8f2",
+    "text_dim": "#6272a4",
+    "background": "#282a36",
+    "surface": "#44475a",
+    "surface_alt": "#21222c",
+    "border": "#6272a4",
+    "prompt": "#bd93f9"
+  }
+}

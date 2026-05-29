@@ -1,0 +1,20 @@
+{
+  "name": "default",
+  "author": "Genesis",
+  "description": "Default dark theme inspired by Tokyo Night",
+  "colors": {
+    "primary": "#7aa2f7",
+    "secondary": "#bb9af7",
+    "success": "#9ece6a",
+    "error": "#f7768e",
+    "warning": "#e0af68",
+    "info": "#7dcfff",
+    "text": "#c0caf5",
+    "text_dim": "#565f89",
+    "background": "#1a1b26",
+    "surface": "#24283b",
+    "surface_alt": "#1f2335",
+    "border": "#3b4261",
+    "prompt": "#7aa2f7"
+  }
+}
