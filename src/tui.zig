@@ -122,9 +122,9 @@ pub const Screen = struct {
         else
             min_output_lines;
 
-        // Set background
+        // Set background and move to home (no clear to avoid flicker)
         try setBg(out, colors.background);
-        try out.writeAll("\x1b[2J\x1b[H");
+        try out.writeAll("\x1b[H");
 
         // Draw logo or minimal header
         if (logo_lines > 0) {
