@@ -45,8 +45,8 @@ pub const Screen = struct {
         raw.lflag.IEXTEN = false;
         raw.lflag.ISIG = false;
 
-        raw.cc[@intFromEnum(std.posix.V.MIN)] = 0;
-        raw.cc[@intFromEnum(std.posix.V.TIME)] = 1;
+        raw.cc[@intFromEnum(std.posix.V.MIN)] = 1;
+        raw.cc[@intFromEnum(std.posix.V.TIME)] = 0;
 
         try std.posix.tcsetattr(fd, std.posix.TCSA.FLUSH, raw);
         self.raw_mode = true;
