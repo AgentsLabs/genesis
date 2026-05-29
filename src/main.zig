@@ -101,7 +101,9 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
         if (list.items.len > 0) {
             _ = list.pop();
         }
-        try addOutput(screen, " ", list.items);
+        const ls_output = list.toOwnedSlice() catch unreachable;
+        defer allocator.free(ls_output);
+        try addOutput(screen, " ", ls_output);
         return;
     }
 
@@ -111,11 +113,8 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
             return;
         }
         const result = tools.readFile(allocator, args);
-        if (result.success) {
-            try addOutput(screen, " ", result.output);
-        } else {
-            try addOutput(screen, " ", result.output);
-        }
+        defer allocator.free(result.output);
+        try addOutput(screen, " ", result.output);
         return;
     }
 
@@ -159,11 +158,8 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
         const new = rest[sep_pos + 1 ..];
 
         const result = tools.editFile(allocator, path, old, new);
-        if (result.success) {
-            try addOutput(screen, " ", result.output);
-        } else {
-            try addOutput(screen, " ", result.output);
-        }
+        defer allocator.free(result.output);
+        try addOutput(screen, " ", result.output);
         return;
     }
 
@@ -175,12 +171,9 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
         screen.status_text = "Running...";
         try screen.render(theme_mgr);
         const result = tools.execBash(allocator, args);
+        defer allocator.free(result.output);
         screen.status_text = "Ready";
-        if (result.success) {
-            try addOutput(screen, " ", result.output);
-        } else {
-            try addOutput(screen, " ", result.output);
-        }
+        try addOutput(screen, " ", result.output);
         return;
     }
 

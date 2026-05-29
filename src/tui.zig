@@ -38,8 +38,6 @@ pub const Screen = struct {
         raw.iflag.INPCK = false;
         raw.iflag.ISTRIP = false;
 
-        raw.oflag.OPOST = false;
-
         raw.cflag.CSIZE = .CS8;
 
         raw.lflag.ECHO = false;
@@ -73,6 +71,10 @@ pub const Screen = struct {
     pub fn addOutput(self: *Screen, text: []const u8) !void {
         const owned = try self.allocator.dupe(u8, text);
         try self.output_lines.append(owned);
+        if (self.output_lines.items.len > 500) {
+            const old = self.output_lines.orderedRemove(0);
+            self.allocator.free(old);
+        }
     }
 
     fn setFg(writer: anytype, color: Theme.Color) !void {
