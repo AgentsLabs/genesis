@@ -160,7 +160,7 @@ pub const Screen = struct {
 
         if (count == 0) {
             try setFg(out, colors.text_dim);
-            try out.writeAll("\x1b[0K  Welcome to Genesis. Type /help for commands.\n");
+            try out.writeAll("\x1b[0K  Welcome to Genesis. Type /onboard for a tutorial.\n");
             try resetStyle(out);
         } else {
             for (self.output_lines.items[start_idx..]) |line| {

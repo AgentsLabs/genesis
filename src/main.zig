@@ -3,6 +3,7 @@ const tui = @import("tui.zig");
 const tools = @import("tools.zig");
 const theme = @import("theme.zig");
 const logo = @import("logo.zig");
+const onboarding = @import("onboarding.zig");
 
 var running: bool = true;
 var multiline_mode: bool = false;
@@ -10,6 +11,7 @@ var multiline_path: []const u8 = "";
 var multiline_line_count: usize = 0;
 var multiline_accum: std.ArrayList(u8) = undefined;
 var has_theme: bool = false;
+var tutor: onboarding.Onboarding = undefined;
 
 fn addOutput(screen: *tui.Screen, prefix: []const u8, text: []const u8) !void {
     const allocator = screen.allocator;
@@ -73,6 +75,7 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
         try addOutput(screen, " ", "  /bash  <command>  Execute a shell command");
         try addOutput(screen, " ", "  /ls    [path]     List directory contents");
         try addOutput(screen, " ", "  /theme <path>     Load a theme JSON file");
+        try addOutput(screen, " ", "  /onboard          Start interactive tutorial");
         try addOutput(screen, " ", "  /clear            Clear the screen");
         try addOutput(screen, " ", "  /help             Show this help message");
         try addOutput(screen, " ", "  /exit             Exit Genesis");
@@ -185,6 +188,11 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
         return;
     }
 
+    if (std.mem.eql(u8, cmd, "onboard") or std.mem.eql(u8, cmd, "tutorial")) {
+        try tutor.start(screen);
+        return;
+    }
+
     if (std.mem.eql(u8, cmd, "theme")) {
         if (args.len == 0) {
             const msg = try std.fmt.allocPrint(allocator, "Current theme: {s}", .{theme_mgr.current.name});
@@ -277,8 +285,13 @@ fn handleKey(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *them
                 running = false;
             },
             0x0A, 0x0D => {
-                // Enter
+                // Save input before handleCommand clears it
+                const input = try allocator.dupe(u8, screen.prompt_buf.items);
+                defer allocator.free(input);
                 try handleCommand(screen, allocator, theme_mgr);
+                if (tutor.active) {
+                    _ = try tutor.processInput(screen, input);
+                }
             },
             0x09 => {
                 // Tab - try to autocomplete /commands
@@ -288,7 +301,7 @@ fn handleKey(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *them
                 } else {
                     // Simple completion for commands
                     const partial = buf[1..];
-                    const commands = [_][]const u8{ "read", "write", "edit", "bash", "ls", "clear", "help", "exit", "theme" };
+                    const commands = [_][]const u8{ "read", "write", "edit", "bash", "ls", "clear", "help", "exit", "theme", "onboard" };
                     for (commands) |cmd_name| {
                         if (std.mem.startsWith(u8, cmd_name, partial)) {
                             screen.prompt_buf.clearRetainingCapacity();
@@ -350,11 +363,14 @@ pub fn main() !void {
         has_theme = true;
     } else |_| {}
 
+    // Initialize onboarding
+    tutor = onboarding.Onboarding.init(allocator);
+
     // Welcome message
     try screen.addOutput("Welcome to Genesis v0.1.0");
     try screen.addOutput("A Modern Coding Harness");
     try screen.addOutput("");
-    try screen.addOutput("Type /help for available commands.");
+    try screen.addOutput("Type /help for commands or /onboard for a tutorial.");
 
     // Main loop
     while (running) {
