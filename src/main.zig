@@ -13,12 +13,15 @@ var has_theme: bool = false;
 
 fn addOutput(screen: *tui.Screen, prefix: []const u8, text: []const u8) !void {
     const allocator = screen.allocator;
-    if (prefix.len > 0) {
-        const line = try std.fmt.allocPrint(allocator, "{s} {s}", .{ prefix, text });
-        defer allocator.free(line);
-        try screen.addOutput(line);
-    } else {
-        try screen.addOutput(text);
+    var it = std.mem.splitScalar(u8, text, '\n');
+    while (it.next()) |line| {
+        if (prefix.len > 0) {
+            const prefixed = try std.fmt.allocPrint(allocator, "{s} {s}", .{ prefix, line });
+            defer allocator.free(prefixed);
+            try screen.addOutput(prefixed);
+        } else {
+            try screen.addOutput(line);
+        }
     }
 }
 
@@ -27,6 +30,8 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
     screen.prompt_buf.clearRetainingCapacity();
 
     if (input.len == 0) return;
+
+    screen.show_full_logo = false;
 
     // Echo the command
     const echo_line = try std.fmt.allocPrint(allocator, "genesis> {s}", .{input});
@@ -85,23 +90,26 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
     if (std.mem.eql(u8, cmd, "ls")) {
         const dir_path = if (args.len > 0) args else ".";
         var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch |err| {
-            try addOutput(screen, " ", try std.fmt.allocPrint(allocator, "Error: cannot open directory - {s}", .{@errorName(err)}));
+            const msg = try std.fmt.allocPrint(allocator, "Error: cannot open directory - {s}", .{@errorName(err)});
+            defer allocator.free(msg);
+            try addOutput(screen, " ", msg);
             return;
         };
         defer dir.close();
 
         var walker = dir.iterate();
         var list = std.ArrayList(u8).init(allocator);
+        defer list.deinit();
         while (try walker.next()) |entry| {
-            const prefix = if (entry.kind == .directory) "📁 " else "📄 ";
-            try list.appendSlice(prefix);
+            const icon = if (entry.kind == .directory) "📁 " else "📄 ";
+            try list.appendSlice(icon);
             try list.appendSlice(entry.name);
             try list.append('\n');
         }
         if (list.items.len > 0) {
             _ = list.pop();
         }
-        const ls_output = list.toOwnedSlice() catch unreachable;
+        const ls_output = try list.toOwnedSlice();
         defer allocator.free(ls_output);
         try addOutput(screen, " ", ls_output);
         return;
@@ -179,23 +187,35 @@ fn handleCommand(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *
 
     if (std.mem.eql(u8, cmd, "theme")) {
         if (args.len == 0) {
-            try addOutput(screen, " ", try std.fmt.allocPrint(allocator, "Current theme: {s}", .{theme_mgr.current.name}));
+            const msg = try std.fmt.allocPrint(allocator, "Current theme: {s}", .{theme_mgr.current.name});
+            defer allocator.free(msg);
+            try addOutput(screen, " ", msg);
             return;
         }
         theme_mgr.loadFromFile(args) catch |err| {
-            try addOutput(screen, " ", try std.fmt.allocPrint(allocator, "Error: cannot load theme '{s}' - {s}", .{ args, @errorName(err) }));
+            const msg = try std.fmt.allocPrint(allocator, "Error: cannot load theme '{s}' - {s}", .{ args, @errorName(err) });
+            defer allocator.free(msg);
+            try addOutput(screen, " ", msg);
             return;
         };
-        try addOutput(screen, " ", try std.fmt.allocPrint(allocator, "Theme loaded: {s}", .{theme_mgr.current.name}));
+        const msg = try std.fmt.allocPrint(allocator, "Theme loaded: {s}", .{theme_mgr.current.name});
+        defer allocator.free(msg);
+        try addOutput(screen, " ", msg);
         return;
     }
 
-    try addOutput(screen, " ", try std.fmt.allocPrint(allocator, "Unknown command: /{s}. Type /help.", .{cmd}));
+    {
+        const msg = try std.fmt.allocPrint(allocator, "Unknown command: /{s}. Type /help.", .{cmd});
+        defer allocator.free(msg);
+        try addOutput(screen, " ", msg);
+    }
 }
 
 fn handleKey(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *theme.ThemeManager) !void {
     const key = screen.readKey() catch |err| {
-        try addOutput(screen, " ", try std.fmt.allocPrint(allocator, "Input error: {s}", .{@errorName(err)}));
+        const msg = try std.fmt.allocPrint(allocator, "Input error: {s}", .{@errorName(err)});
+        defer allocator.free(msg);
+        try addOutput(screen, " ", msg);
         return;
     };
     const b = key orelse return;
@@ -220,11 +240,8 @@ fn handleKey(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *them
                     multiline_mode = false;
                     screen.status_text = "Ready";
                     const result = tools.writeFile(allocator, path, content);
-                    if (result.success) {
-                        try addOutput(screen, " ", result.output);
-                    } else {
-                        try addOutput(screen, " ", result.output);
-                    }
+                    defer allocator.free(result.output);
+                    try addOutput(screen, " ", result.output);
                     allocator.free(path);
                     multiline_accum.deinit();
                 } else {
@@ -233,6 +250,7 @@ fn handleKey(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *them
                     multiline_accum.append('\n') catch {};
                     multiline_line_count += 1;
                     const count_line = try std.fmt.allocPrint(allocator, "  line {d}: {s}", .{ multiline_line_count, line });
+                    defer allocator.free(count_line);
                     try screen.addOutput(count_line);
                 }
                 screen.prompt_buf.clearRetainingCapacity();
@@ -271,7 +289,7 @@ fn handleKey(screen: *tui.Screen, allocator: std.mem.Allocator, theme_mgr: *them
                     // Simple completion for commands
                     const partial = buf[1..];
                     const commands = [_][]const u8{ "read", "write", "edit", "bash", "ls", "clear", "help", "exit", "theme" };
-                    inline for (commands) |cmd_name| {
+                    for (commands) |cmd_name| {
                         if (std.mem.startsWith(u8, cmd_name, partial)) {
                             screen.prompt_buf.clearRetainingCapacity();
                             try screen.prompt_buf.append('/');
@@ -343,6 +361,9 @@ pub fn main() !void {
         try screen.render(&theme_mgr);
         try handleKey(&screen, allocator, &theme_mgr);
     }
+
+    // Final render to show exit message
+    try screen.render(&theme_mgr);
 
     // Clean shutdown
     theme_mgr.deinit();

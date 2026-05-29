@@ -11,6 +11,7 @@ pub const Screen = struct {
     status_text: []const u8,
     raw_mode: bool,
     original_termios: std.posix.termios,
+    show_full_logo: bool,
 
     pub fn init(allocator: std.mem.Allocator) Screen {
         var s = Screen{
@@ -22,6 +23,7 @@ pub const Screen = struct {
             .status_text = "Ready",
             .raw_mode = false,
             .original_termios = undefined,
+            .show_full_logo = true,
         };
         s.refreshSize();
         return s;
@@ -98,6 +100,7 @@ pub const Screen = struct {
     pub fn clearScreen(self: *Screen) !void {
         self.output_lines.clearAndFree();
         self.prompt_buf.clearRetainingCapacity();
+        self.show_full_logo = true;
     }
 
     pub fn render(self: *Screen, theme: *const Theme.ThemeManager) !void {
@@ -110,12 +113,12 @@ pub const Screen = struct {
 
         // Calculate layout
         const logo = Logo.getLogo();
-        const logo_lines = logo.lines.len;
-        const input_area: usize = 4;
-        const status_area: usize = 1;
+        const logo_lines = if (self.show_full_logo) logo.lines.len else 0;
+        const head_lines: usize = if (logo_lines > 0) logo_lines else 1;
+        const area_overhead: usize = head_lines + 1 + 1 + 1 + 1; // logo/head + sep + prompt + input_sep + status
         const min_output_lines: usize = 3;
-        const output_avail = if (self.height > logo_lines + input_area + status_area + min_output_lines)
-            self.height - logo_lines - input_area - status_area
+        const output_avail = if (self.height > area_overhead + min_output_lines)
+            self.height - area_overhead
         else
             min_output_lines;
 
@@ -123,11 +126,19 @@ pub const Screen = struct {
         try setBg(out, colors.background);
         try out.writeAll("\x1b[2J\x1b[H");
 
-        // Draw logo
-        try setFg(out, colors.primary);
-        for (logo.lines) |line| {
+        // Draw logo or minimal header
+        if (logo_lines > 0) {
+            try setFg(out, colors.primary);
+            for (logo.lines) |line| {
+                try out.writeAll("\x1b[0K");
+                try out.writeAll(line);
+                try out.writeAll("\n");
+            }
+        } else {
+            try setFg(out, colors.text_dim);
             try out.writeAll("\x1b[0K");
-            try out.writeAll(line);
+            try out.writeAll("  genesis v0.1.0");
+            try resetStyle(out);
             try out.writeAll("\n");
         }
 
@@ -136,7 +147,7 @@ pub const Screen = struct {
         try setFg(out, colors.text_dim);
         try out.writeAll("\x1b[0K");
         var i: usize = 0;
-        while (i < self.width and i < 80) : (i += 1) {
+        while (i < self.width) : (i += 1) {
             try out.writeAll("─");
         }
         try resetStyle(out);
@@ -162,7 +173,8 @@ pub const Screen = struct {
         }
 
         // Fill remaining output area
-        var fill: usize = count;
+        const fill_start: usize = if (count == 0) @as(usize, 1) else count;
+        var fill: usize = fill_start;
         while (fill < output_avail) : (fill += 1) {
             try out.writeAll("\x1b[0K\n");
         }
@@ -190,7 +202,7 @@ pub const Screen = struct {
         try setFg(out, colors.text_dim);
         try out.writeAll("\x1b[0K├");
         i = 0;
-        while (i < self.width - 1 and i < 60) : (i += 1) {
+        while (i < self.width - 1) : (i += 1) {
             try out.writeAll("─");
         }
         try resetStyle(out);
